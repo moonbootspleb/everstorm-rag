@@ -19,7 +19,8 @@ Gradio demo for **Project 2**: Everstorm Outfitters customer-support RAG (FAISS 
 
 | | |
 |---|---|
-| **Space** | `moonbootspleb/everstorm-rag` |
+| **Space (HF)** | `moonbootspleb/everstorm-rag` |
+| **GitHub** | [moonbootspleb/everstorm-rag](https://github.com/moonbootspleb/everstorm-rag) |
 | **Source (monorepo)** | `BYTEBTYEGO/demos-2/` |
 | **Deploy guide** | [DEPLOY.md](DEPLOY.md) |
 | **Embedded on** | [moonboots.tech](https://moonboots.tech/blog/building-a-support-rag-chatbot) |
