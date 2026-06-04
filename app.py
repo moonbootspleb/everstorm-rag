@@ -88,7 +88,7 @@ def _policy_list_html() -> str:
     )
 
 
-def _status_banner() -> str:
+def _status_banner() -> str | None:
     if _INDEX_ERROR:
         return (
             f"**Index not loaded:** `{_INDEX_ERROR}` — "
@@ -97,7 +97,7 @@ def _status_banner() -> str:
     if _CORPUS.get("errors"):
         err = "; ".join(_CORPUS["errors"])
         return f"**Warning:** some PDFs failed to load: {err}"
-    return f"**Backend:** `{rag_core.llm_backend_name()}`"
+    return None
 
 
 def _format_sources_html(sources: list[dict]) -> str:
@@ -195,7 +195,9 @@ _moonboots_theme = build_moonboots_theme()
 with gr.Blocks(title="Everstorm Support", fill_width=True) as demo:
     gr.HTML(EVERSTORM_HERO_HTML)
     gr.HTML(_policy_list_html())
-    gr.Markdown(_status_banner())
+    _banner = _status_banner()
+    if _banner:
+        gr.Markdown(_banner)
 
     chatbot = gr.Chatbot(label="Support chat", height=420, value=WELCOME_MESSAGE)
     chat_in = gr.Textbox(
