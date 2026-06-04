@@ -106,18 +106,20 @@ def run_retrieve(query: str, k: int) -> str:
     return "".join(parts) or "<p>No matches.</p>"
 
 
-def chat_fn(message: str, history: list[list[str]]) -> tuple[list[list[str]], str]:
+def chat_fn(message: str, history: list[dict]) -> tuple[list[dict], str]:
     if not message.strip():
         return history, ""
+    user_msg = {"role": "user", "content": message}
     if _INDEX_ERROR:
-        history = history + [[message, _INDEX_ERROR]]
-        return history, ""
+        return history + [user_msg, {"role": "assistant", "content": _INDEX_ERROR}], ""
     result = rag_core.rag_step(message, top_k=TOP_K)
     answer = result["answer"]
     if result.get("retrieval_only"):
         answer = f"_{rag_core.RETRIEVAL_ONLY_MESSAGE.split('.')[0]}._\n\n{answer}"
-    history = history + [[message, answer]]
-    return history, _format_sources_html(result.get("sources") or [])
+    return (
+        history + [user_msg, {"role": "assistant", "content": answer}],
+        _format_sources_html(result.get("sources") or []),
+    )
 
 
 EXAMPLE_QUESTIONS = [
