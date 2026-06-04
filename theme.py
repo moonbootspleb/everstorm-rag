@@ -140,6 +140,132 @@ html, body {{
 
 .gradio-container .markdown-prose {{ color: {BODY} !important; }}
 footer {{ display: none !important; }}
+
+/* Grok-style chat: scrollable transcript + fixed composer */
+.everstorm-chat-shell {{
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: min(68vh, 560px) !important;
+    max-height: min(78vh, 720px) !important;
+    margin: 0.5rem 0 1rem !important;
+    background: {CANVAS_RAISED} !important;
+    border: 1px solid {HAIRLINE} !important;
+    border-radius: 1.25rem !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    gap: 0 !important;
+}}
+
+.everstorm-chat-shell > .form,
+.everstorm-chat-shell > .column {{
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+}}
+
+.everstorm-chat-messages {{
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+}}
+
+.everstorm-chat-messages > .form,
+.everstorm-chat-messages .block {{
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0.75rem 1rem 0.25rem !important;
+    height: 100% !important;
+}}
+
+.everstorm-chat-messages .bubble-wrap,
+.everstorm-chat-messages [class*="chatbot"] {{
+    max-height: 100% !important;
+    overflow-y: auto !important;
+}}
+
+.everstorm-chat-composer {{
+    flex-shrink: 0 !important;
+    padding: 0.75rem 1rem 0.65rem !important;
+    border-top: 1px solid {HAIRLINE} !important;
+    background: {ORBITAL} !important;
+    gap: 0.35rem !important;
+}}
+
+.everstorm-chat-composer > .form,
+.everstorm-chat-composer .block {{
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}}
+
+.everstorm-chat-composer-row {{
+    align-items: flex-end !important;
+    gap: 0.5rem !important;
+}}
+
+.everstorm-chat-composer-row textarea {{
+    min-height: 2.75rem !important;
+    border-radius: 1.25rem !important;
+    padding: 0.7rem 1rem !important;
+    line-height: 1.45 !important;
+}}
+
+.everstorm-chat-composer-row button.primary {{
+    min-width: 4.75rem !important;
+    height: 2.75rem !important;
+    flex-shrink: 0 !important;
+}}
+
+.everstorm-chat-hint {{
+    margin: 0 !important;
+    padding: 0 0.15rem !important;
+    font-size: 0.72rem !important;
+    color: {MUTE} !important;
+    font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+    letter-spacing: 0.04em !important;
+}}
+
+.everstorm-chat-toolbar {{
+    align-items: center !important;
+    gap: 0.5rem !important;
+}}
+
+.everstorm-chat-toolbar button {{
+    font-size: 0.8rem !important;
+}}
+"""
+
+EVERSTORM_CHAT_JS = """
+function everstormChatComposerKeydown(e) {
+    const root = document.getElementById('everstorm-chat-input');
+    if (!root) return;
+    const field = root.querySelector('textarea');
+    if (!field || e.target !== field) return;
+    if (e.key !== 'Enter') return;
+    if (e.shiftKey) return;
+    e.preventDefault();
+    if (!field.value.trim()) return;
+    const send = document.getElementById('everstorm-chat-send');
+    if (send) send.click();
+}
+
+function everstormChatComposerInit() {
+    document.removeEventListener('keydown', everstormChatComposerKeydown, true);
+    document.addEventListener('keydown', everstormChatComposerKeydown, true);
+}
+
+everstormChatComposerInit();
+if (window.gradioApp) {
+    const observer = new MutationObserver(() => everstormChatComposerInit());
+    observer.observe(document.body, { childList: true, subtree: true });
+}
 """
 
 THEME_OVERRIDES = {

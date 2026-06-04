@@ -46,6 +46,7 @@ elif (_LAB / "rag_core.py").exists():
 
 import rag_core  # noqa: E402
 from theme import (  # noqa: E402
+    EVERSTORM_CHAT_JS,
     EVERSTORM_HERO_HTML,
     HAIRLINE,
     INK,
@@ -199,16 +200,37 @@ with gr.Blocks(title="Everstorm Support", fill_width=True) as demo:
     if _banner:
         gr.Markdown(_banner)
 
-    chatbot = gr.Chatbot(label="Support chat", height=420, value=WELCOME_MESSAGE)
-    chat_in = gr.Textbox(
-        label="Your question",
-        lines=2,
-        placeholder="e.g. How long does standard shipping take?",
-        autofocus=True,
-    )
-    with gr.Row():
-        chat_btn = gr.Button("Send", variant="primary", scale=1)
-        clear_btn = gr.Button("Clear chat", scale=1)
+    with gr.Column(elem_classes="everstorm-chat-shell"):
+        chatbot = gr.Chatbot(
+            value=WELCOME_MESSAGE,
+            height=480,
+            show_label=False,
+            layout="bubble",
+            autoscroll=True,
+            elem_classes="everstorm-chat-messages",
+        )
+        with gr.Column(elem_classes="everstorm-chat-composer"):
+            with gr.Row(elem_classes="everstorm-chat-composer-row"):
+                chat_in = gr.Textbox(
+                    show_label=False,
+                    lines=1,
+                    max_lines=8,
+                    placeholder="Ask about shipping, returns, sizing, or payments…",
+                    autofocus=True,
+                    elem_id="everstorm-chat-input",
+                    scale=9,
+                )
+                chat_btn = gr.Button(
+                    "Send",
+                    variant="primary",
+                    scale=1,
+                    elem_id="everstorm-chat-send",
+                )
+            with gr.Row(elem_classes="everstorm-chat-toolbar"):
+                clear_btn = gr.Button("Clear chat", scale=0)
+                gr.HTML(
+                    '<p class="everstorm-chat-hint">Enter to send · Shift+Enter for new line</p>',
+                )
     chat_sources = gr.HTML(label="Sources")
     gr.Examples(examples=[[q] for q in EXAMPLE_QUESTIONS], inputs=chat_in)
 
@@ -238,4 +260,9 @@ with gr.Blocks(title="Everstorm Support", fill_width=True) as demo:
                 ret_btn.click(run_retrieve, inputs=[ret_q, ret_k], outputs=ret_out)
                 gr.Examples(examples=[[q] for q in EXAMPLE_QUESTIONS], inputs=ret_q)
 
-demo.launch(ssr_mode=False, theme=_moonboots_theme, css=MOONBOOTS_CSS)
+demo.launch(
+    ssr_mode=False,
+    theme=_moonboots_theme,
+    css=MOONBOOTS_CSS,
+    js=EVERSTORM_CHAT_JS,
+)
