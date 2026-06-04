@@ -178,7 +178,7 @@ WELCOME_MESSAGE = [
         "content": (
             "Hi — I'm the Everstorm support assistant. Ask about **shipping**, "
             "**returns & refunds**, **product sizing & care**, or **payment & security**. "
-            "I'll answer from our policy documents and show sources below."
+            "For contact questions I'll list the relevant department emails from our policies."
         ),
     }
 ]
@@ -186,7 +186,7 @@ WELCOME_MESSAGE = [
 EXAMPLE_QUESTIONS = [
     "What is your refund policy and how do I start a return?",
     "How long does standard shipping take?",
-    "How do I contact customer support?",
+    "How do I contact Everstorm about a return or shipping issue?",
     "What size should I order if I'm between sizes?",
 ]
 

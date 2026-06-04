@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,14 +25,15 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:1b")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 SYSTEM_TEMPLATE = """
-You are a **Customer Support Chatbot**. Use only the information in CONTEXT to answer.
-If the answer is not in CONTEXT, respond with "I'm not sure from the docs."
+You are an Everstorm Outfitters customer support assistant. Use ONLY the CONTEXT below.
 
 Rules:
-1) Use ONLY the provided <context> to answer.
-2) If the answer is not in the context, say: "I don't know based on the retrieved documents."
-3) Be concise and accurate. Prefer quoting key phrases from the context.
-4) When possible, cite sources as [source: source] using the metadata.
+1) Answer only from the context — do not invent policies or contact details.
+2) If the context does not contain the answer, say: "I don't know based on the retrieved documents."
+3) Be concise. Quote key phrases and cite sources as [source: filename].
+4) For contact or support questions: list every @everstorm.example email in the context and
+   what each is for (returns, shipping, billing, sizing, claims, etc.). If contact emails
+   appear in the context, use them — do not say you are unsure.
 
 CONTEXT:
 {context}
@@ -39,6 +41,14 @@ CONTEXT:
 USER:
 {question}
 """
+
+CONTACT_QUERY_RE = re.compile(
+    r"\b(contact|support|help|reach|email us|get in touch|phone|call us)\b",
+    re.I,
+)
+CONTACT_SEARCH_QUERY = (
+    "Contact email everstorm.example returns logistics billing claims sizecare parts"
+)
 
 RETRIEVAL_ONLY_MESSAGE = (
     "Retrieval-only mode: no LLM is configured. Set **OLLAMA_BASE_URL** (remote Ollama via "
@@ -52,6 +62,7 @@ _vectorstore: FAISS | None = None
 _retriever = None
 _prompt: ChatPromptTemplate | None = None
 _corpus_cache: dict[str, Any] | None = None
+_contact_snippets: list[Document] | None = None
 
 
 def project_root() -> Path:
@@ -249,14 +260,80 @@ def load_policy_corpus() -> dict[str, Any]:
         except Exception as exc:
             errors.append(f"{path.name}: {exc}")
 
+    all_text = re.sub(r"\s+", " ", "\n".join(d.page_content for d in pages))
+    emails = sorted(set(m.group().lower() for m in re.finditer(r"[\w.+-]+@everstorm\.example", all_text, re.I)))
+
     _corpus_cache = {
         "pdf_count": len(paths),
         "page_count": len(pages),
         "files": [p.name for p in paths],
         "paths": [str(p) for p in paths],
         "errors": errors,
+        "contact_emails": emails,
     }
+    contact_snippets()
     return _corpus_cache
+
+
+def _is_contact_question(question: str) -> bool:
+    return bool(CONTACT_QUERY_RE.search(question))
+
+
+def _build_contact_snippets() -> list[Document]:
+    """Extract department email lines from policy PDFs for contact-style questions."""
+    email_re = re.compile(r"[\w.+-]+@everstorm\.example", re.I)
+    snippets: list[Document] = []
+    seen_emails: set[str] = set()
+
+    for path in pdf_paths():
+        try:
+            pages = PyPDFLoader(str(path)).load()
+        except Exception:
+            continue
+        for page in pages:
+            norm = re.sub(r"\s+", " ", page.page_content)
+            for match in email_re.finditer(norm):
+                email = match.group().lower()
+                if email in seen_emails:
+                    continue
+                seen_emails.add(email)
+                start = max(0, match.start() - 100)
+                end = min(len(norm), match.end() + 80)
+                context = norm[start:end].strip()
+                snippets.append(
+                    Document(
+                        page_content=f"[source: {path.name}] {context}",
+                        metadata={"source": str(path), "kind": "contact"},
+                    )
+                )
+
+    if snippets:
+        lines = "\n".join(f"- {s.page_content}" for s in snippets)
+        snippets.insert(
+            0,
+            Document(
+                page_content=(
+                    "Everstorm department contacts from policy documents:\n" + lines
+                ),
+                metadata={"source": "contact_directory", "kind": "contact"},
+            ),
+        )
+    return snippets
+
+
+def contact_snippets() -> list[Document]:
+    global _contact_snippets
+    if _contact_snippets is None:
+        _contact_snippets = _build_contact_snippets()
+    return _contact_snippets
+
+
+def _append_unique(docs: list[Document], seen: set[str], incoming: list[Document]) -> None:
+    for doc in incoming:
+        key = _doc_key(doc)
+        if key not in seen:
+            seen.add(key)
+            docs.append(doc)
 
 
 def _doc_key(doc: Document) -> str:
@@ -283,28 +360,30 @@ def _search_by_source(vs: FAISS, question: str, path: Path, k: int) -> list[Docu
 def retrieve_documents(question: str, top_k: int = CHAT_TOP_K) -> list[Document]:
     """Retrieve chunks for RAG, pulling from every indexed policy PDF when possible."""
     paths = pdf_paths()
-    vs = get_vectorstore()
     if not paths:
         return get_retriever(top_k=top_k).invoke(question)
 
+    vs = get_vectorstore()
     seen: set[str] = set()
     docs: list[Document] = []
 
+    if _is_contact_question(question):
+        _append_unique(docs, seen, contact_snippets())
+        _append_unique(
+            docs,
+            seen,
+            [doc for doc, _ in retrieve_with_scores(CONTACT_SEARCH_QUERY, top_k=top_k)],
+        )
+
     for path in paths:
-        for doc in _search_by_source(vs, question, path, k=PER_PDF_K):
-            key = _doc_key(doc)
-            if key not in seen:
-                seen.add(key)
-                docs.append(doc)
+        _append_unique(docs, seen, _search_by_source(vs, question, path, k=PER_PDF_K))
 
     if len(docs) < top_k:
-        for doc, _ in retrieve_with_scores(question, top_k=top_k * 2):
-            key = _doc_key(doc)
-            if key not in seen:
-                seen.add(key)
-                docs.append(doc)
-            if len(docs) >= top_k:
-                break
+        _append_unique(
+            docs,
+            seen,
+            [doc for doc, _ in retrieve_with_scores(question, top_k=top_k * 2)],
+        )
 
     return docs[:top_k]
 
