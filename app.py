@@ -154,12 +154,7 @@ EXAMPLE_QUESTIONS = [
 
 _moonboots_theme = build_moonboots_theme()
 
-try:
-    demo = gr.Blocks(title="Everstorm RAG", fill_width=True, theme=_moonboots_theme, css=MOONBOOTS_CSS)
-except TypeError:
-    demo = gr.Blocks(title="Everstorm RAG", theme=_moonboots_theme, css=MOONBOOTS_CSS)
-
-with demo:
+with gr.Blocks(title="Everstorm RAG", fill_width=True) as demo:
     gr.HTML(EVERSTORM_HERO_HTML)
     gr.Markdown(_status_banner())
 
@@ -193,4 +188,4 @@ with demo:
             chat_in.submit(chat_fn, inputs=[chat_in, chatbot], outputs=[chatbot, chat_sources])
             gr.Examples(examples=[[q] for q in EXAMPLE_QUESTIONS], inputs=chat_in)
 
-demo.launch(ssr_mode=False)
+demo.launch(ssr_mode=False, theme=_moonboots_theme, css=MOONBOOTS_CSS)
