@@ -7,6 +7,27 @@ import os
 import sys
 from pathlib import Path
 
+
+def _patch_asyncio_event_loop_del() -> None:
+    """Suppress Gradio 6 asyncio GC noise on Hugging Face Spaces (see gradio#12699)."""
+    import asyncio.base_events as base_events
+
+    original_del = getattr(base_events.BaseEventLoop, "__del__", None)
+    if original_del is None:
+        return
+
+    def _patched_del(self) -> None:
+        try:
+            original_del(self)
+        except ValueError as exc:
+            if str(exc) != "Invalid file descriptor: -1":
+                raise
+
+    base_events.BaseEventLoop.__del__ = _patched_del  # type: ignore[method-assign]
+
+
+_patch_asyncio_event_loop_del()
+
 import gradio as gr
 
 _DEMO_ROOT = Path(__file__).resolve().parent
@@ -48,7 +69,12 @@ def _status_banner() -> str:
             f"**Index not loaded:** `{_INDEX_ERROR}` — "
             "run `python scripts/build_index.py` and commit `vectorstore/`."
         )
-    return f"**Backend:** `{rag_core.llm_backend_name()}` · **Root:** `{rag_core.project_root()}`"
+    backend = (
+        f"openai:{rag_core.OPENAI_MODEL}"
+        if os.environ.get("OPENAI_API_KEY")
+        else "retrieval-only"
+    )
+    return f"**Backend:** `{backend}` · **Root:** `{rag_core.project_root()}`"
 
 
 def _format_sources_html(sources: list[dict]) -> str:
@@ -131,9 +157,9 @@ EXAMPLE_QUESTIONS = [
 _moonboots_theme = build_moonboots_theme()
 
 try:
-    demo = gr.Blocks(title="Everstorm RAG", fill_width=True)
+    demo = gr.Blocks(title="Everstorm RAG", fill_width=True, theme=_moonboots_theme, css=MOONBOOTS_CSS)
 except TypeError:
-    demo = gr.Blocks(title="Everstorm RAG")
+    demo = gr.Blocks(title="Everstorm RAG", theme=_moonboots_theme, css=MOONBOOTS_CSS)
 
 with demo:
     gr.HTML(EVERSTORM_HERO_HTML)
@@ -169,4 +195,4 @@ with demo:
             chat_in.submit(chat_fn, inputs=[chat_in, chatbot], outputs=[chatbot, chat_sources])
             gr.Examples(examples=[[q] for q in EXAMPLE_QUESTIONS], inputs=chat_in)
 
-demo.launch(theme=_moonboots_theme, css=MOONBOOTS_CSS)
+demo.launch(ssr_mode=False)
