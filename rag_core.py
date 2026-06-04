@@ -18,6 +18,8 @@ CHUNK_SIZE = 300
 CHUNK_OVERLAP = 30
 EMBEDDING_MODEL = "thenlper/gte-small"
 DEFAULT_TOP_K = 4
+CHAT_TOP_K = 8
+PER_PDF_K = 2
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:1b")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
@@ -49,6 +51,7 @@ _llm = None
 _vectorstore: FAISS | None = None
 _retriever = None
 _prompt: ChatPromptTemplate | None = None
+_corpus_cache: dict[str, Any] | None = None
 
 
 def project_root() -> Path:
@@ -231,6 +234,81 @@ def llm_backend_name() -> str:
     return f"ollama:{OLLAMA_MODEL}@127.0.0.1:11434"
 
 
+def load_policy_corpus() -> dict[str, Any]:
+    """Eager-load all Everstorm PDFs; return counts and filenames for startup checks."""
+    global _corpus_cache
+    if _corpus_cache is not None:
+        return _corpus_cache
+
+    paths = pdf_paths()
+    pages: list[Document] = []
+    errors: list[str] = []
+    for path in paths:
+        try:
+            pages.extend(PyPDFLoader(str(path)).load())
+        except Exception as exc:
+            errors.append(f"{path.name}: {exc}")
+
+    _corpus_cache = {
+        "pdf_count": len(paths),
+        "page_count": len(pages),
+        "files": [p.name for p in paths],
+        "paths": [str(p) for p in paths],
+        "errors": errors,
+    }
+    return _corpus_cache
+
+
+def _doc_key(doc: Document) -> str:
+    return f"{_source_label(doc)}:{doc.page_content[:120]}"
+
+
+def _search_by_source(vs: FAISS, question: str, path: Path, k: int) -> list[Document]:
+    """Similarity search scoped to one PDF (full path or basename metadata)."""
+    src = str(path)
+    for filt in ({"source": src}, {"source": path.name}):
+        try:
+            hits = vs.similarity_search(question, k=k, filter=filt)
+            if hits:
+                return hits
+        except Exception:
+            continue
+
+    hits = vs.similarity_search(question, k=max(k * 4, 8))
+    name = path.name
+    matched = [d for d in hits if name in _source_label(d)]
+    return matched[:k]
+
+
+def retrieve_documents(question: str, top_k: int = CHAT_TOP_K) -> list[Document]:
+    """Retrieve chunks for RAG, pulling from every indexed policy PDF when possible."""
+    paths = pdf_paths()
+    vs = get_vectorstore()
+    if not paths:
+        return get_retriever(top_k=top_k).invoke(question)
+
+    seen: set[str] = set()
+    docs: list[Document] = []
+
+    for path in paths:
+        for doc in _search_by_source(vs, question, path, k=PER_PDF_K):
+            key = _doc_key(doc)
+            if key not in seen:
+                seen.add(key)
+                docs.append(doc)
+
+    if len(docs) < top_k:
+        for doc, _ in retrieve_with_scores(question, top_k=top_k * 2):
+            key = _doc_key(doc)
+            if key not in seen:
+                seen.add(key)
+                docs.append(doc)
+            if len(docs) >= top_k:
+                break
+
+    return docs[:top_k]
+
+
 def retrieve_with_scores(question: str, top_k: int = DEFAULT_TOP_K) -> list[tuple[Document, float]]:
     return get_vectorstore().similarity_search_with_score(question, k=top_k)
 
@@ -271,10 +349,9 @@ def policy_catalog() -> list[dict[str, Any]]:
     return catalog
 
 
-def rag_step(question: str, top_k: int = DEFAULT_TOP_K) -> dict[str, Any]:
+def rag_step(question: str, top_k: int = CHAT_TOP_K) -> dict[str, Any]:
     """Retrieve → prompt → LLM; returns answer, sources, and optional retrieval_only flag."""
-    retriever = get_retriever(top_k=top_k)
-    docs = retriever.invoke(question)
+    docs = retrieve_documents(question, top_k=top_k)
     context = format_docs(docs)
     sources = [
         {

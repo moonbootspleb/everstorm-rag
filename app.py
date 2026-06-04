@@ -54,13 +54,38 @@ from theme import (  # noqa: E402
     build_moonboots_theme,
 )
 
-TOP_K = 4
 _INDEX_ERROR: str | None = None
+_CORPUS: dict = {}
 
 try:
     rag_core.load_vectorstore()
+    _CORPUS = rag_core.load_policy_corpus()
 except Exception as exc:
     _INDEX_ERROR = str(exc)
+
+
+def _policy_list_html() -> str:
+    if _INDEX_ERROR:
+        return ""
+    files = _CORPUS.get("files") or []
+    if not files:
+        return "<p style='color:rgba(255,255,255,0.45);'>No policy PDFs found.</p>"
+    chips = []
+    for name in files:
+        label = html.escape(name.replace("Everstorm_", "").replace("_", " ").replace(".pdf", ""))
+        chips.append(
+            f'<span style="display:inline-block;margin:0 6px 6px 0;padding:4px 10px;'
+            f"border:1px solid {HAIRLINE};border-radius:999px;background:{ORBITAL};"
+            f"font-family:'JetBrains Mono',ui-monospace,monospace;font-size:0.65rem;"
+            f'letter-spacing:0.06em;color:{INK};">{label}</span>'
+        )
+    count = _CORPUS.get("pdf_count", len(files))
+    pages = _CORPUS.get("page_count", 0)
+    return (
+        f'<p style="margin:0 0 8px;color:rgba(255,255,255,0.45);font-size:0.85rem;">'
+        f"{count} policies loaded ({pages} pages) — answers draw from all documents.</p>"
+        + "".join(chips)
+    )
 
 
 def _status_banner() -> str:
@@ -69,10 +94,10 @@ def _status_banner() -> str:
             f"**Index not loaded:** `{_INDEX_ERROR}` — "
             "run `python scripts/build_index.py` and commit `vectorstore/`."
         )
-    return (
-        f"**Backend:** `{rag_core.llm_backend_name()}` · "
-        f"**Root:** `{rag_core.project_root()}`"
-    )
+    if _CORPUS.get("errors"):
+        err = "; ".join(_CORPUS["errors"])
+        return f"**Warning:** some PDFs failed to load: {err}"
+    return f"**Backend:** `{rag_core.llm_backend_name()}`"
 
 
 def _format_sources_html(sources: list[dict]) -> str:
@@ -130,62 +155,85 @@ def run_retrieve(query: str, k: int) -> str:
     return "".join(parts) or "<p>No matches.</p>"
 
 
-def chat_fn(message: str, history: list[dict]) -> tuple[list[dict], str]:
+def chat_fn(message: str, history: list[dict]) -> tuple[list[dict], str, str]:
     if not message.strip():
-        return history, ""
+        return history, "", gr.update()
     user_msg = {"role": "user", "content": message}
     if _INDEX_ERROR:
-        return history + [user_msg, {"role": "assistant", "content": _INDEX_ERROR}], ""
-    result = rag_core.rag_step(message, top_k=TOP_K)
+        return history + [user_msg, {"role": "assistant", "content": _INDEX_ERROR}], "", gr.update(value="")
+    result = rag_core.rag_step(message)
     answer = result["answer"]
     if result.get("retrieval_only"):
         answer = f"_{rag_core.RETRIEVAL_ONLY_MESSAGE.split('.')[0]}._\n\n{answer}"
     return (
         history + [user_msg, {"role": "assistant", "content": answer}],
         _format_sources_html(result.get("sources") or []),
+        gr.update(value=""),
     )
 
+
+WELCOME_MESSAGE = [
+    {
+        "role": "assistant",
+        "content": (
+            "Hi — I'm the Everstorm support assistant. Ask about **shipping**, "
+            "**returns & refunds**, **product sizing & care**, or **payment & security**. "
+            "I'll answer from our policy documents and show sources below."
+        ),
+    }
+]
 
 EXAMPLE_QUESTIONS = [
     "What is your refund policy and how do I start a return?",
     "How long does standard shipping take?",
     "How do I contact customer support?",
+    "What size should I order if I'm between sizes?",
 ]
 
 _moonboots_theme = build_moonboots_theme()
 
-with gr.Blocks(title="Everstorm RAG", fill_width=True) as demo:
+with gr.Blocks(title="Everstorm Support", fill_width=True) as demo:
     gr.HTML(EVERSTORM_HERO_HTML)
+    gr.HTML(_policy_list_html())
     gr.Markdown(_status_banner())
 
-    with gr.Tabs():
-        with gr.Tab("Policies"):
-            pol_dd = gr.Dropdown(
-                label="Policy document",
-                choices=policy_choices(),
-                value=policy_choices()[0] if policy_choices() else None,
-            )
-            pol_meta = gr.Markdown()
-            pol_preview = gr.Textbox(label="Excerpt preview", lines=14, max_lines=20)
-            pol_file = gr.Textbox(label="Source filename", interactive=False)
-            pol_dd.change(show_policy, inputs=pol_dd, outputs=[pol_meta, pol_preview, pol_file])
-            demo.load(show_policy, inputs=pol_dd, outputs=[pol_meta, pol_preview, pol_file])
+    chatbot = gr.Chatbot(label="Support chat", height=420, value=WELCOME_MESSAGE)
+    chat_in = gr.Textbox(
+        label="Your question",
+        lines=2,
+        placeholder="e.g. How long does standard shipping take?",
+        autofocus=True,
+    )
+    with gr.Row():
+        chat_btn = gr.Button("Send", variant="primary", scale=1)
+        clear_btn = gr.Button("Clear chat", scale=1)
+    chat_sources = gr.HTML(label="Sources")
+    gr.Examples(examples=[[q] for q in EXAMPLE_QUESTIONS], inputs=chat_in)
 
-        with gr.Tab("Retrieve"):
-            ret_q = gr.Textbox(label="Query", lines=2, placeholder="e.g. refund within 30 days")
-            ret_k = gr.Slider(1, 8, value=TOP_K, step=1, label="Top-k")
-            ret_out = gr.HTML(label="Chunks")
-            ret_btn = gr.Button("Search", variant="primary")
-            ret_btn.click(run_retrieve, inputs=[ret_q, ret_k], outputs=ret_out)
-            gr.Examples(examples=[[q] for q in EXAMPLE_QUESTIONS], inputs=ret_q)
+    chat_btn.click(chat_fn, inputs=[chat_in, chatbot], outputs=[chatbot, chat_sources, chat_in])
+    chat_in.submit(chat_fn, inputs=[chat_in, chatbot], outputs=[chatbot, chat_sources, chat_in])
+    clear_btn.click(lambda: (WELCOME_MESSAGE, "", ""), outputs=[chatbot, chat_sources, chat_in])
 
-        with gr.Tab("Support chat"):
-            chatbot = gr.Chatbot(label="Everstorm support", height=360)
-            chat_in = gr.Textbox(label="Your question", lines=2)
-            chat_sources = gr.HTML(label="Sources")
-            chat_btn = gr.Button("Send", variant="primary")
-            chat_btn.click(chat_fn, inputs=[chat_in, chatbot], outputs=[chatbot, chat_sources])
-            chat_in.submit(chat_fn, inputs=[chat_in, chatbot], outputs=[chatbot, chat_sources])
-            gr.Examples(examples=[[q] for q in EXAMPLE_QUESTIONS], inputs=chat_in)
+    with gr.Accordion("Browse policies & debug retrieval", open=False):
+        with gr.Tabs():
+            with gr.Tab("Policies"):
+                pol_dd = gr.Dropdown(
+                    label="Policy document",
+                    choices=policy_choices(),
+                    value=policy_choices()[0] if policy_choices() else None,
+                )
+                pol_meta = gr.Markdown()
+                pol_preview = gr.Textbox(label="Excerpt preview", lines=14, max_lines=20)
+                pol_file = gr.Textbox(label="Source filename", interactive=False)
+                pol_dd.change(show_policy, inputs=pol_dd, outputs=[pol_meta, pol_preview, pol_file])
+                demo.load(show_policy, inputs=pol_dd, outputs=[pol_meta, pol_preview, pol_file])
+
+            with gr.Tab("Retrieve"):
+                ret_q = gr.Textbox(label="Query", lines=2, placeholder="e.g. refund within 30 days")
+                ret_k = gr.Slider(1, 12, value=rag_core.CHAT_TOP_K, step=1, label="Top-k")
+                ret_out = gr.HTML(label="Chunks")
+                ret_btn = gr.Button("Search", variant="primary")
+                ret_btn.click(run_retrieve, inputs=[ret_q, ret_k], outputs=ret_out)
+                gr.Examples(examples=[[q] for q in EXAMPLE_QUESTIONS], inputs=ret_q)
 
 demo.launch(ssr_mode=False, theme=_moonboots_theme, css=MOONBOOTS_CSS)

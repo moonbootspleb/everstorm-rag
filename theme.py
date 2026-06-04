@@ -193,20 +193,14 @@ def build_moonboots_theme():
 
 
 EVERSTORM_HERO_HTML = """
-<div style="margin-bottom:1.25rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.08);">
+<div style="margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.08);">
   <p style="margin:0 0 0.5rem;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:0.75rem;
      letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.38);">
-    Project 2 · RAG
+    Everstorm Outfitters · Support
   </p>
-  <h1 style="margin:0 0 0.75rem;font-family:'Syne',ui-sans-serif,system-ui,sans-serif;font-size:1.875rem;
+  <h1 style="margin:0;font-family:'Syne',ui-sans-serif,system-ui,sans-serif;font-size:1.75rem;
      font-weight:600;color:#ffffff;line-height:1.15;">
-    Everstorm customer support
+    Ask about shipping, returns, sizing &amp; more
   </h1>
-  <p style="margin:0;font-family:'DM Sans',ui-sans-serif,system-ui,sans-serif;font-size:1rem;
-     line-height:1.6;color:rgba(255,255,255,0.55);max-width:42rem;">
-    Policy PDFs → FAISS + gte-small → grounded answers. Set
-    <code>OLLAMA_BASE_URL</code> (Tailscale Funnel) or <code>OPENAI_API_KEY</code> on the Space;
-    locally use Ollama <code>gemma3:1b</code>.
-  </p>
 </div>
 """
