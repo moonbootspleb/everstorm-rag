@@ -34,9 +34,12 @@ Gradio demo for **Project 2**: Everstorm Outfitters customer-support RAG (FAISS 
 
 | Secret | Purpose |
 |--------|---------|
-| `OPENAI_API_KEY` | Enables `gpt-4o-mini` for Support chat |
+| `OLLAMA_BASE_URL` | Remote Ollama via Tailscale Funnel (see [DEPLOY.md](DEPLOY.md)) |
+| `OLLAMA_MODEL` | Model name override (default `gemma3:1b`) |
+| `OLLAMA_API_KEY` | Bearer token if Ollama auth is enabled |
+| `OPENAI_API_KEY` | Alternative: `gpt-4o-mini` on OpenAI cloud |
 
-Without it, the Space runs in **retrieval-only** mode (policy excerpts, no generated answer). **Retrieve** and **Policies** work without a key.
+Without `OLLAMA_BASE_URL` or `OPENAI_API_KEY`, the Space runs in **retrieval-only** mode. **Retrieve** and **Policies** work without LLM secrets.
 
 ## Local run
 

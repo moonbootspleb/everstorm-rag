@@ -69,12 +69,10 @@ def _status_banner() -> str:
             f"**Index not loaded:** `{_INDEX_ERROR}` — "
             "run `python scripts/build_index.py` and commit `vectorstore/`."
         )
-    backend = (
-        f"openai:{rag_core.OPENAI_MODEL}"
-        if os.environ.get("OPENAI_API_KEY")
-        else "retrieval-only"
+    return (
+        f"**Backend:** `{rag_core.llm_backend_name()}` · "
+        f"**Root:** `{rag_core.project_root()}`"
     )
-    return f"**Backend:** `{backend}` · **Root:** `{rag_core.project_root()}`"
 
 
 def _format_sources_html(sources: list[dict]) -> str:

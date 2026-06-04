@@ -39,9 +39,10 @@ USER:
 """
 
 RETRIEVAL_ONLY_MESSAGE = (
-    "Retrieval-only mode: no LLM is configured. Set **OPENAI_API_KEY** in this Space's "
-    "secrets (Settings → Repository secrets) for gpt-4o-mini, or run locally with Ollama "
-    "(`ollama serve` + `ollama pull gemma3:1b`). Top matching policy excerpts are shown below."
+    "Retrieval-only mode: no LLM is configured. Set **OLLAMA_BASE_URL** (remote Ollama via "
+    "Tailscale Funnel) or **OPENAI_API_KEY** in this Space's secrets (Settings → Repository "
+    "secrets). Locally: `ollama serve` + `ollama pull gemma3:1b`. Top matching policy "
+    "excerpts are shown below."
 )
 
 _llm = None
@@ -160,11 +161,40 @@ def _source_label(doc: Document) -> str:
     return Path(doc.metadata.get("source", "unknown")).name
 
 
+def ollama_base_url() -> str | None:
+    """Remote Ollama URL (e.g. Tailscale Funnel). No trailing slash."""
+    url = os.environ.get("OLLAMA_BASE_URL", "").strip().rstrip("/")
+    return url or None
+
+
+def _make_chat_ollama(base_url: str):
+    from langchain_ollama import ChatOllama
+
+    kwargs: dict[str, Any] = {
+        "model": OLLAMA_MODEL,
+        "temperature": 0.1,
+        "base_url": base_url,
+    }
+    api_key = os.environ.get("OLLAMA_API_KEY", "").strip()
+    if api_key:
+        kwargs["client_kwargs"] = {"headers": {"Authorization": f"Bearer {api_key}"}}
+    return ChatOllama(**kwargs)
+
+
 def get_llm():
-    """Ollama when reachable locally; else OpenAI if OPENAI_API_KEY is set."""
+    """Remote Ollama (OLLAMA_BASE_URL) → OpenAI → local Ollama for dev."""
     global _llm
     if _llm is not None:
         return _llm
+
+    remote = ollama_base_url()
+    if remote:
+        try:
+            _llm = _make_chat_ollama(remote)
+            return _llm
+        except Exception:
+            _llm = None
+            return None
 
     if os.environ.get("OPENAI_API_KEY"):
         try:
@@ -179,9 +209,7 @@ def get_llm():
             return _llm
 
     try:
-        from langchain_ollama import OllamaLLM
-
-        _llm = OllamaLLM(model=OLLAMA_MODEL, temperature=0.1)
+        _llm = _make_chat_ollama("http://127.0.0.1:11434")
         return _llm
     except Exception:
         _llm = None
@@ -189,11 +217,17 @@ def get_llm():
 
 
 def llm_backend_name() -> str:
+    remote = ollama_base_url()
+    if remote:
+        from urllib.parse import urlparse
+
+        host = urlparse(remote).netloc or remote
+        return f"ollama:{OLLAMA_MODEL}@{host}"
     if os.environ.get("OPENAI_API_KEY"):
         return f"openai:{OPENAI_MODEL}"
-    if get_llm() is not None:
-        return f"ollama:{OLLAMA_MODEL}"
-    return "retrieval-only"
+    if os.environ.get("SPACE_ID"):
+        return "retrieval-only"
+    return f"ollama:{OLLAMA_MODEL}@127.0.0.1:11434"
 
 
 def retrieve_with_scores(question: str, top_k: int = DEFAULT_TOP_K) -> list[tuple[Document, float]]:

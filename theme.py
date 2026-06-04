@@ -204,8 +204,9 @@ EVERSTORM_HERO_HTML = """
   </h1>
   <p style="margin:0;font-family:'DM Sans',ui-sans-serif,system-ui,sans-serif;font-size:1rem;
      line-height:1.6;color:rgba(255,255,255,0.55);max-width:42rem;">
-    Policy PDFs → FAISS + gte-small → grounded answers. On Hugging Face, set
-    <code>OPENAI_API_KEY</code> for chat; locally use Ollama <code>gemma3:1b</code>.
+    Policy PDFs → FAISS + gte-small → grounded answers. Set
+    <code>OLLAMA_BASE_URL</code> (Tailscale Funnel) or <code>OPENAI_API_KEY</code> on the Space;
+    locally use Ollama <code>gemma3:1b</code>.
   </p>
 </div>
 """
