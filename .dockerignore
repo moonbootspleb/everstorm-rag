@@ -3,6 +3,4 @@ __pycache__
 .venv
 .git
 app_gradio.py
-theme.py
 streamlit_app.py
-requirements.txt
