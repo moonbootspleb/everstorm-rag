@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+api/
+Dockerfile
+fly.toml
+requirements-api.txt
+scripts/run_api.sh
+streamlit_app.py
+app_gradio.py
+.dockerignore
