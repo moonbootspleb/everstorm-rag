@@ -168,6 +168,7 @@ def ollama_base_url() -> str | None:
 
 
 def _make_chat_ollama(base_url: str):
+    """Connect to Ollama at base_url. OLLAMA_API_KEY is optional (proxy auth only)."""
     from langchain_ollama import ChatOllama
 
     kwargs: dict[str, Any] = {

@@ -99,21 +99,21 @@ Note the Funnel HTTPS URL (e.g. `https://your-host.tail12345.ts.net`).
 ./scripts/verify_ollama_remote.sh https://your-host.tail12345.ts.net
 ```
 
-**Lock it down** (pick at least one):
+No Ollama auth is required — the Space calls your Funnel URL over HTTPS with no bearer token.
 
-- Set `OLLAMA_API_KEY` in Ollama’s environment and the same value in HF secrets
-- Restrict Tailscale Funnel identity in the Tailscale admin console
-- Put nginx/caddy with bearer auth in front of `:11434`
-
-**HF Space secrets:**
+**HF Space secrets** (no auth):
 
 | Secret | Example | Required |
 |--------|---------|----------|
 | `OLLAMA_BASE_URL` | `https://your-host.tail12345.ts.net` | Yes |
 | `OLLAMA_MODEL` | `gemma3:1b` | No (defaults in code) |
-| `OLLAMA_API_KEY` | shared secret | If Ollama auth enabled |
 
-Do **not** set `OPENAI_API_KEY` if you want home Ollama only.
+Do **not** set `OLLAMA_API_KEY` unless you add auth yourself. Do **not** set `OPENAI_API_KEY` if you want home Ollama only.
+
+**Optional hardening** (Funnel exposes Ollama to the public internet):
+
+- Restrict Tailscale Funnel identity in the Tailscale admin console
+- Put nginx/caddy with bearer auth in front of `:11434`, then set matching `OLLAMA_API_KEY` in HF secrets
 
 After saving secrets, the Space rebuilds. Status banner should show `ollama:gemma3:1b@your-host...`.
 
